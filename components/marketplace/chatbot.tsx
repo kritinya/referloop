@@ -65,32 +65,89 @@ export function Chatbot() {
   }
 
   const generateAIResponse = (query: string): string => {
-    const q = query.toLowerCase()
+    const q = query.toLowerCase().trim()
 
-    if (q.includes("how does") || q.includes("work") || q.includes("features") || q.includes("what is")) {
-      return "Referloop is an anonymous backchannel referral marketplace. Verified employees post open roles inside their companies (often with gift card or cash bounties). Job seekers upload a resume, select their expertise, and apply with a short 200-character pitch. If an employee shortlists and refers you, you skip the application queue and they unlock the bounty!"
-    }
-    if (q.includes("anonymous") || q.includes("identity") || q.includes("private") || q.includes("safe")) {
-      return "Anonymity is our core value. Employees post opportunities behind anonymized handles (e.g. Anon_01) and their real names/details are never displayed. Seekers submit pitches anonymously at first, and their uploaded resumes are only shared with the specific verified employee they apply to. Your current company will never know you are browsing!"
-    }
-    if (q.includes("bounty") || q.includes("bounties") || q.includes("reward") || q.includes("bonus")) {
-      return "Bounties are referral incentives pledged by employees. If an employee refers you and you secure the role, the employee receives the bounty (e.g. $100 Gift Card or Bonus). Roles with bounties attract 3.2x more applicants, but posting roles without bounties is also completely free."
-    }
-    if (q.includes("pitch") || q.includes("resume") || q.includes("tips") || q.includes("advice")) {
-      return "To maximize your referral rate: \n1. Focus on metrics in your 200-character pitch (e.g. 'Scaled payments system to 40k RPS' or 'Grew onboarding activation 34%').\n2. Keep your resume clean and scan it using our AI Resume Insights on the Profile tab to identify missing skills. \n3. Ensure your pitch speaks directly to the job stack listed."
-    }
-    if (q.includes("token") || q.includes("tokens") || q.includes("apply")) {
-      return "Seekers receive 5 application tokens. Applying to a job spends 1 token. This token limit prevents spam and ensures employees review only high-intent, high-signal applicants."
-    }
-    if (q.includes("employee") || q.includes("verify") || q.includes("employer")) {
-      return "Employees verify using their corporate email domain (e.g. alex@stripe.com). We authenticate the domain and immediately unlock the Employee Dashboard, where they can post opportunities, review applicants on a Kanban board, and chat anonymously with candidates."
-    }
-    if (q.includes("hello") || q.includes("hi ") || q.includes("hey")) {
-      return "Hello! How can I help you today? Ask me about Referloop's features, how referrals work, or general job search advice!"
+    // 1. Greetings
+    if (q.match(/^(hi|hello|hey|greetings|good morning|good afternoon|yo|hello there)/)) {
+      return "Hello! I am Referloop AI, your job search and referral guide. You can ask me about how Referloop works, how to get referred, anonymous employee verification, bounties, or get general resume and interview preparation tips. What can I help you with today?"
     }
 
-    // Smart general fallback
-    return `That's a great question! While I am trained primarily on Referloop's referral mechanics (anonymity, bounties, and tokenized applications), I can tell you that in any job search, backchanneling is the single most effective way to land interviews. \n\nCould you clarify if you're asking about the Seeker dashboard, Employee verification, or how to write a high-scoring pitch?`
+    // 2. Help request
+    if (q === "help" || q === "info" || q === "guide" || q === "what can you do") {
+      return "I can help you with several things:\n\n1. **How Referloop Works:** Ask about tokens, anonymity, or the application process.\n2. **Employee Domain Verification:** Learn how employees verify their corporate domains securely.\n3. **Referral Bounties:** Find out how bounties work and how employees earn them.\n4. **Resume & Pitch Tips:** Get advice on how to raise your AI match score and write high-impact pitches."
+    }
+
+    // 3. Specific Referloop Features (Check specific entities before general terms like "work")
+    if (q.includes("bounty") || q.includes("bounties") || q.includes("reward") || q.includes("bonus") || q.includes("gift card") || q.includes("earn")) {
+      return "Referral bounties are incentives (such as gift cards or cash bonuses) pledged by employees to attract high-quality candidates.\n\n- If you are referred and hired, the employee receives the bounty.\n- Roles with bounties receive 3.2x more applicants on average.\n- You can filter the job feed to view only roles with bounties."
+    }
+
+    if (q.includes("token") || q.includes("tokens") || q.includes("limit")) {
+      return "Seekers get 5 application tokens. Applying to a role spends 1 token.\n\nThis token cap prevents candidate spamming, ensuring that employees receive only high-signal, high-intent applications. If an application is not reviewed or remains pending, the token is returned."
+    }
+
+    if (q.includes("anonymous") || q.includes("anonymity") || q.includes("privacy") || q.includes("private") || q.includes("identity") || q.includes("safe") || q.includes("security")) {
+      return "Security and privacy are our top priorities:\n\n- **Employees** post under anonymous handles (e.g., Anon_01) so their identity is never visible to the public or candidates.\n- **Seekers** apply anonymously; their resumes are only shared with the specific employee who receives their application.\n- Your current company will never know you are browsing or applying."
+    }
+
+    if (q.includes("verify") || q.includes("verification") || q.includes("email") || q.includes("work email") || q.includes("authenticate")) {
+      return "Employees verify using their corporate email domain (e.g. name@stripe.com). We authenticate the domain and immediately unlock the Employee Dashboard, where they can post opportunities, review applicants on a Kanban board, and chat anonymously."
+    }
+
+    if (q.includes("chat") || q.includes("message") || q.includes("messaging") || q.includes("communication") || q.includes("talk to")) {
+      return "Once an employee shortlists a candidate, a secure Anonymous Chat window opens. This lets the seeker and employee coordinate on resume details, discuss team dynamics, and prepare for the interview anonymously."
+    }
+
+    // 4. Career & Resume Guidance
+    if (q.includes("pitch") || q.includes("write pitch") || q.includes("why me") || q.includes("pitch tips")) {
+      return "Tips for writing a high-impact pitch (max 200 characters):\n\n1. **Lead with experience:** State your title and primary stack immediately.\n2. **Quantify achievements:** Use hard metrics (e.g. 'Scaled payments API to 40k RPS' or 'Decreased page load by 35%').\n3. **Be specific:** Target the primary skill required for the role."
+    }
+
+    if (q.includes("resume") || q.includes("tips") || q.includes("advice") || q.includes("improve") || q.includes("feedback") || q.includes("insights")) {
+      return "To improve your resume:\n\n- Focus on results and metrics rather than listing daily duties.\n- Tailor your skills section to match the job descriptions of the roles you are targeting.\n- Use the **AI Resume Insights** panel in your Seeker Profile to scan your uploaded resume for strengths and recommended areas of improvement."
+    }
+
+    if (q.includes("interview") || q.includes("prep") || q.includes("prepare")) {
+      return "To prepare for your referred interview:\n\n- Ask your referrer about the interview format (e.g., LeetCode, system design, or domain-specific testing).\n- Inquire about the team's primary engineering challenges.\n- Focus on stories that demonstrate end-to-end ownership and high technical output."
+    }
+
+    if (q.includes("negotiate") || q.includes("negotiation") || q.includes("salary") || q.includes("pay")) {
+      return "Salary negotiation tips:\n\n- Research market rates using reliable databases like levels.fyi.\n- Avoid naming a number first; ask for the budget range for the position.\n- Leverage multiple interviews or offers to increase your negotiation leverage."
+    }
+
+    // 5. Flows
+    if (q.includes("seeker") || q.includes("apply") || q.includes("application") || q.includes("candidate")) {
+      return "To apply as a Seeker:\n1. Upload your resume and select your expertise on the landing page.\n2. Browse the Job Feed and select a role.\n3. Click '1-Click Apply' and write a brief (up to 200 characters) pitch highlighting your achievements.\n4. Once submitted, your application status (Pending, Shortlisted, Referred) will be tracked under the 'My Applications' tab."
+    }
+
+    if (q.includes("post") || q.includes("employee") || q.includes("referrer") || q.includes("kanban") || q.includes("review")) {
+      return "As an Employee, you can:\n- Post anonymous opportunities with custom bounties.\n- Review candidates in a visual Kanban board divided into 'New Applicants', 'Shortlisted', and 'Referred'.\n- Shortlist candidates to open the Anonymous Chat.\n- Mark candidates as 'Referred' to trigger a successful referral."
+    }
+
+    // 6. General Platform
+    if (q.includes("how does") || q.includes("how it works") || q.includes("what is referloop") || q.includes("features") || q.includes("explain referloop") || q.includes("work")) {
+      return "Referloop is a platform that connects job seekers directly with verified, anonymous employees inside top companies for direct referrals.\n\n- **Seekers** upload their resumes, select their expertise, and apply for roles with one click using a brief pitch.\n- **Employees** verify their work domains anonymously, post open roles, review candidates, and refer them to unlock bounties.\n- Once shortlisted, both parties can coordinate anonymously via our built-in chat."
+    }
+
+    // 7. General Q&A
+    if (q.includes("why") || q.includes("reason")) {
+      return "Referrals bypass applicant tracking systems (ATS), which filter out 75%+ of cold resumes. An employee referral ensures your application lands directly in front of the hiring manager, raising your interview rates by over 3x."
+    }
+
+    if (q.includes("jobs") || q.includes("roles") || q.includes("feed") || q.includes("positions")) {
+      return "We have opportunities in Software Engineering, Data & AI, Product, Design, Sales, Marketing, and Operations. Go to the Job Feed tab on the Seeker Dashboard to see the current active listings."
+    }
+
+    if (q.includes("who are you") || q.includes("your name") || q.includes("bot")) {
+      return "I am the Referloop AI assistant! I am here to guide you through using the platform, optimizing your referral search, and answering general career questions."
+    }
+
+    if (q.includes("thank") || q.includes("thanks") || q.includes("cool") || q.includes("awesome") || q.includes("great")) {
+      return "You're very welcome! Let me know if you need any other assistance with Referloop or your job search. I'm always here to help."
+    }
+
+    // 8. General Fallback
+    return "That's an interesting question. While I'm specialized in Referloop's referral platform (anonymity, bounties, tokens, and verification), I can also answer general career questions. \n\nCould you specify if you need help with resume tips, interview preparation, getting referred, or verification?"
   }
 
   return (
