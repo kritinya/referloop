@@ -21,6 +21,7 @@ import {
   MessageSquare,
   CheckCircle2,
   X,
+  Sparkles,
 } from "lucide-react"
 import { useState, useMemo } from "react"
 
