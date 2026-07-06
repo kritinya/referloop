@@ -192,30 +192,71 @@ function EmployeePanel() {
   const [step, setStep] = useState<"initial" | "email" | "code">("initial")
   const [emailInput, setEmailInput] = useState("")
   const [codeInput, setCodeInput] = useState("")
-  const [expectedCode, setExpectedCode] = useState("")
   const [codeError, setCodeError] = useState(false)
+  const [loading, setLoading] = useState(false)
 
   const verified = verifiedEmail !== null
 
-  const handleSendCode = () => {
+  const handleSendCode = async () => {
     if (!emailInput.trim() || !emailInput.includes("@")) {
       addToast("Please enter a valid work email address.", "error")
       return
     }
-    const code = Math.floor(1000 + Math.random() * 9000).toString()
-    setExpectedCode(code)
-    setCodeError(false)
-    setStep("code")
-    addToast(`Security code sent! Enter code: ${code}`, "info")
+    setLoading(true)
+    try {
+      const res = await fetch("/api/verify/send", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: emailInput.trim() }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send verification code.")
+      }
+
+      setCodeError(false)
+      setStep("code")
+      setCodeInput("")
+      if (data.mock) {
+        addToast(`[Mock Mode] Verification code generated: ${data.code}`, "info")
+      } else {
+        addToast("Verification code sent to your email!", "success")
+      }
+    } catch (err: any) {
+      addToast(err.message, "error")
+    } finally {
+      setLoading(false)
+    }
   }
 
-  const handleVerifyCode = () => {
-    if (codeInput === expectedCode) {
+  const handleVerifyCode = async () => {
+    if (codeInput.trim().length !== 6) {
+      addToast("Please enter the 6-digit verification code.", "error")
+      return
+    }
+    setLoading(true)
+    try {
+      const res = await fetch("/api/verify/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: emailInput.trim(),
+          code: codeInput.trim(),
+        }),
+      })
+      const data = await res.json()
+      if (!res.ok) {
+        setCodeError(true)
+        throw new Error(data.error || "Incorrect code. Please try again.")
+      }
+
       setVerifiedEmail(emailInput.trim())
       setStep("initial")
-    } else {
-      setCodeError(true)
-      addToast("Invalid verification code. Please try again.", "error")
+      addToast("Email verified successfully!", "success")
+    } catch (err: any) {
+      addToast(err.message, "error")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -335,31 +376,33 @@ function EmployeePanel() {
             size="sm"
             className="w-full"
             onClick={handleSendCode}
-            disabled={!emailInput.trim() || !emailInput.includes("@")}
+            disabled={!emailInput.trim() || !emailInput.includes("@") || loading}
           >
-            Send Verification Code
+            {loading ? "Sending..." : "Send Verification Code"}
           </Button>
         </div>
       ) : (
         <div className="mt-6 rounded-xl border border-border bg-muted/40 p-4 space-y-3">
           <div className="flex items-center justify-between">
-            <span className="text-sm font-medium">Enter 4-Digit Code</span>
+            <span className="text-sm font-medium">Enter 6-Digit Code</span>
             <button
               onClick={() => setStep("email")}
+              disabled={loading}
               className="text-xs text-muted-foreground hover:text-foreground cursor-pointer"
             >
               Back
             </button>
           </div>
           <p className="text-[10px] text-muted-foreground">
-            A temporary verification code has been simulated for {emailInput}.
+            Enter the 6-digit security code sent to {emailInput}.
           </p>
           <input
             type="text"
-            maxLength={4}
+            maxLength={6}
             value={codeInput}
+            disabled={loading}
             onChange={(e) => setCodeInput(e.target.value)}
-            placeholder="4-digit code"
+            placeholder="6-digit code"
             className={cn(
               "w-full text-center tracking-widest font-mono rounded-xl border px-3 py-1.5 text-sm outline-none focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/40",
               codeError ? "border-destructive text-destructive" : "border-input bg-background"
@@ -369,9 +412,9 @@ function EmployeePanel() {
             size="sm"
             className="w-full"
             onClick={handleVerifyCode}
-            disabled={codeInput.length !== 4}
+            disabled={codeInput.length !== 6 || loading}
           >
-            Verify Code
+            {loading ? "Verifying..." : "Verify Code"}
           </Button>
         </div>
       )}
