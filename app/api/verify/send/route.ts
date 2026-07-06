@@ -17,11 +17,12 @@ export async function POST(request: Request) {
     saveOTP(email, code)
 
     const apiKey = process.env.RESEND_API_KEY
+    const fromEmail = process.env.RESEND_FROM_EMAIL || "onboarding@resend.dev"
 
     if (apiKey) {
       const resend = new Resend(apiKey)
-      await resend.emails.send({
-        from: "Referloop Verification <onboarding@resend.dev>",
+      const { data, error } = await resend.emails.send({
+        from: `Referloop Verification <${fromEmail}>`,
         to: email,
         subject: `${code} is your Referloop verification code`,
         html: `
@@ -35,6 +36,14 @@ export async function POST(request: Request) {
           </div>
         `,
       })
+
+      if (error) {
+        console.error("Resend API error:", error)
+        return NextResponse.json(
+          { error: error.message || "Failed to send email via Resend." },
+          { status: 400 }
+        )
+      }
 
       return NextResponse.json({
         success: true,
