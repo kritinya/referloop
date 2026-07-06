@@ -46,6 +46,8 @@ export type Application = {
   matchScore: number
   status: ApplicationStatus
   appliedAt: number // timestamp (ms)
+  resumePdf?: string | null
+  resumeSummary?: any | null
 }
 
 export type Message = {
@@ -75,13 +77,15 @@ type MarketplaceState = {
   tokensRemaining: number
   maxTokens: number
   resumeName: string | null
+  resumePdf: string | null
+  resumeSummary: any | null
   selectedExpertise: Category[]
   seekerName: string
 
   setSelectedExpertise: (c: Category[]) => void
-  uploadResume: (name: string) => void
+  uploadResume: (name: string, pdfBase64: string, summary: any) => void
   deleteResume: () => void
-  enterSeeker: (expertise: Category[], resume: string) => void
+  enterSeeker: (expertise: Category[], resume: string, resumePdf: string | null, resumeSummary: any | null) => void
 
   applyToJob: (jobId: number, pitch: string) => { ok: boolean; reason?: string }
   hasApplied: (jobId: number) => boolean
@@ -261,6 +265,8 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
   const [tokensRemaining, setTokensRemaining] = useState(4)
   const maxTokens = 5
   const [resumeName, setResumeName] = useState<string | null>(null)
+  const [resumePdf, setResumePdf] = useState<string | null>(null)
+  const [resumeSummary, setResumeSummary] = useState<any | null>(null)
   const [selectedExpertise, setSelectedExpertise] = useState<Category[]>([])
   const seekerName = "You (Alex Morgan)"
 
@@ -280,6 +286,8 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
         const savedApps = localStorage.getItem("backchannel_applications")
         const savedTokens = localStorage.getItem("backchannel_tokens")
         const savedResume = localStorage.getItem("backchannel_resume")
+        const savedResumePdf = localStorage.getItem("backchannel_resume_pdf")
+        const savedResumeSummary = localStorage.getItem("backchannel_resume_summary")
         const savedExpertise = localStorage.getItem("backchannel_expertise")
         const savedEmail = localStorage.getItem("backchannel_email")
         const savedMsgs = localStorage.getItem("backchannel_messages")
@@ -289,6 +297,8 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
         if (savedApps) setApplications(JSON.parse(savedApps))
         if (savedTokens) setTokensRemaining(Number(savedTokens))
         if (savedResume) setResumeName(savedResume === "" ? null : savedResume)
+        if (savedResumePdf) setResumePdf(savedResumePdf === "" ? null : savedResumePdf)
+        if (savedResumeSummary) setResumeSummary(savedResumeSummary === "" ? null : JSON.parse(savedResumeSummary))
         if (savedExpertise) setSelectedExpertise(JSON.parse(savedExpertise))
         if (savedEmail) setVerifiedEmail(savedEmail === "" ? null : savedEmail)
         if (savedMsgs) setMessages(JSON.parse(savedMsgs))
@@ -309,13 +319,15 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
       localStorage.setItem("backchannel_applications", JSON.stringify(applications))
       localStorage.setItem("backchannel_tokens", String(tokensRemaining))
       localStorage.setItem("backchannel_resume", resumeName || "")
+      localStorage.setItem("backchannel_resume_pdf", resumePdf || "")
+      localStorage.setItem("backchannel_resume_summary", resumeSummary ? JSON.stringify(resumeSummary) : "")
       localStorage.setItem("backchannel_expertise", JSON.stringify(selectedExpertise))
       localStorage.setItem("backchannel_email", verifiedEmail || "")
       localStorage.setItem("backchannel_messages", JSON.stringify(messages))
     } catch (e) {
       console.error("Failed to save state to localStorage:", e)
     }
-  }, [hydrated, view, jobs, applications, tokensRemaining, resumeName, selectedExpertise, verifiedEmail, messages])
+  }, [hydrated, view, jobs, applications, tokensRemaining, resumeName, resumePdf, resumeSummary, selectedExpertise, verifiedEmail, messages])
 
   const addToast = (message: string, type: "success" | "info" | "error" = "success") => {
     const id = Date.now() + Math.random()
@@ -347,20 +359,28 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
       tokensRemaining,
       maxTokens,
       resumeName,
+      resumePdf,
+      resumeSummary,
       selectedExpertise,
       seekerName,
       setSelectedExpertise,
-      uploadResume: (name) => {
+      uploadResume: (name, pdfBase64, summary) => {
         setResumeName(name)
-        addToast(`Resume "${name}" uploaded successfully!`, "success")
+        setResumePdf(pdfBase64)
+        setResumeSummary(summary)
+        addToast(`Resume "${name}" uploaded and analyzed!`, "success")
       },
       deleteResume: () => {
         setResumeName(null)
+        setResumePdf(null)
+        setResumeSummary(null)
         addToast("Resume removed from profile.", "info")
       },
-      enterSeeker: (expertise, resume) => {
+      enterSeeker: (expertise, resume, resumePdfVal, resumeSummaryVal) => {
         setSelectedExpertise(expertise)
         setResumeName(resume)
+        setResumePdf(resumePdfVal)
+        setResumeSummary(resumeSummaryVal)
         setView("seeker")
         addToast("Entered Seeker Dashboard.", "info")
       },
@@ -388,11 +408,13 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
             jobTitle: job.title,
             category: job.category,
             candidateName: seekerName,
-            primarySkill: job.stack.split(",")[0]?.trim() ?? "Generalist",
+            primarySkill: resumeSummary?.skills?.[0] || job.stack.split(",")[0]?.trim() || "Generalist",
             pitch,
-            matchScore: randomMatchScore(),
+            matchScore: resumeSummary?.matchScore || randomMatchScore(),
             status: "pending",
             appliedAt: Date.now(),
+            resumePdf,
+            resumeSummary,
           },
           ...prev,
         ])

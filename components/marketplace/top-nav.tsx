@@ -13,7 +13,34 @@ const NAV_ITEMS: { label: string; view: View }[] = [
 ]
 
 export function TopNav() {
-  const { view, setView } = useMarketplace()
+  const { view, setView, verifiedEmail, resumeName } = useMarketplace()
+
+  const getButtonText = () => {
+    if (verifiedEmail && resumeName) {
+      const domain = verifiedEmail.split("@")[1] || "Verified"
+      return `Active: ${domain} & Seeker`
+    }
+    if (verifiedEmail) {
+      const domain = verifiedEmail.split("@")[1] || "Verified"
+      return `Employee Verified (${domain})`
+    }
+    if (resumeName) {
+      return "Seeker Active"
+    }
+    return "Sign in"
+  }
+
+  const handleAuthClick = () => {
+    if (verifiedEmail) {
+      setView("employee")
+    } else if (resumeName) {
+      setView("seeker")
+    } else {
+      setView("home")
+    }
+  }
+
+  const authenticated = !!(verifiedEmail || resumeName)
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
@@ -27,7 +54,7 @@ export function TopNav() {
             <Network className="size-5" />
           </span>
           <span className="font-display text-lg font-bold tracking-tight">
-            Backchannel
+            Referloop
           </span>
         </button>
 
@@ -51,8 +78,15 @@ export function TopNav() {
         </nav>
 
         <div className="hidden md:block">
-          <Button variant="outline" size="sm" onClick={() => setView("home")}>
-            Sign in
+          <Button
+            variant={authenticated ? "default" : "outline"}
+            size="sm"
+            onClick={handleAuthClick}
+            className={cn(
+              authenticated && "bg-success text-success-foreground border-success hover:bg-success/90 hover:text-success-foreground"
+            )}
+          >
+            {getButtonText()}
           </Button>
         </div>
       </div>

@@ -578,45 +578,98 @@ function ResumeModal({
               </div>
 
               <div className="mt-3 space-y-3 text-sm">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Summary
-                  </p>
-                  <p className="mt-1 text-pretty">
-                    Results-driven professional with a track record in{" "}
-                    {app.primarySkill.toLowerCase()}. Known for shipping quickly
-                    and raising the bar on quality.
-                  </p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Experience
-                  </p>
-                  <ul className="mt-1 space-y-1">
-                    <li className="flex items-start gap-2">
-                      <UserRound className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-                      Senior role · 4 yrs · led cross-functional initiatives
-                    </li>
-                    <li className="flex items-start gap-2">
-                      <UserRound className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
-                      Mid-level role · 3 yrs · owned core product surface
-                    </li>
-                  </ul>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                    Top Skills
-                  </p>
-                  <div className="mt-1.5 flex flex-wrap gap-1.5">
-                    {[app.primarySkill, "Collaboration", "Ownership", "Communication"].map(
-                      (s) => (
-                        <Badge key={s} variant="outline">
-                          {s}
-                        </Badge>
-                      ),
-                    )}
-                  </div>
-                </div>
+                {app.resumeSummary ? (
+                  <>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        AI Resume Summary
+                      </p>
+                      <p className="mt-1 text-pretty text-xs italic">
+                        {app.resumeSummary.summary}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Candidate Strengths
+                      </p>
+                      <ul className="mt-1 space-y-1 text-xs">
+                        {app.resumeSummary.strengths?.map((str: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <BadgeCheck className="mt-0.5 size-3.5 shrink-0 text-success" />
+                            {str}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Optimization Areas
+                      </p>
+                      <ul className="mt-1 space-y-1 text-xs">
+                        {app.resumeSummary.weaknesses?.map((weak: string, i: number) => (
+                          <li key={i} className="flex items-start gap-2">
+                            <Clock className="mt-0.5 size-3.5 shrink-0 text-amber-500" />
+                            {weak}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Parsed Skills
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {app.resumeSummary.skills?.map((s: string) => (
+                          <Badge key={s} variant="outline">
+                            {s}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Summary
+                      </p>
+                      <p className="mt-1 text-pretty">
+                        Results-driven professional with a track record in{" "}
+                        {app.primarySkill.toLowerCase()}. Known for shipping quickly
+                        and raising the bar on quality.
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Experience
+                      </p>
+                      <ul className="mt-1 space-y-1">
+                        <li className="flex items-start gap-2">
+                          <UserRound className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                          Senior role · 4 yrs · led cross-functional initiatives
+                        </li>
+                        <li className="flex items-start gap-2">
+                          <UserRound className="mt-0.5 size-3.5 shrink-0 text-muted-foreground" />
+                          Mid-level role · 3 yrs · owned core product surface
+                        </li>
+                      </ul>
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Top Skills
+                      </p>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {[app.primarySkill, "Collaboration", "Ownership", "Communication"].map(
+                          (s) => (
+                            <Badge key={s} variant="outline">
+                              {s}
+                            </Badge>
+                          ),
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 
@@ -624,6 +677,23 @@ function ResumeModal({
               <Button variant="outline" className="flex-1" onClick={onClose}>
                 Close
               </Button>
+              {app.resumePdf && (
+                <Button 
+                  variant="default" 
+                  className="flex-1 gap-1.5" 
+                  onClick={() => {
+                    const newWindow = window.open()
+                    if (newWindow) {
+                      newWindow.document.write(
+                        `<iframe src="${app.resumePdf}" frameborder="0" style="border:0; top:0; left:0; bottom:0; right:0; width:100%; height:100%;" allowfullscreen></iframe>`
+                      )
+                    }
+                  }}
+                >
+                  <FileText className="size-4" />
+                  View Original PDF
+                </Button>
+              )}
             </div>
           </div>
 

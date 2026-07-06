@@ -23,7 +23,7 @@ import {
   X,
   Sparkles,
 } from "lucide-react"
-import { useState, useMemo } from "react"
+import { useState, useMemo, useRef } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -604,8 +604,55 @@ function ExpiryCountdown({ appliedAt }: { appliedAt: number }) {
 /* ---------------- My Profile ---------------- */
 
 function MyProfile() {
-  const { resumeName, uploadResume, deleteResume, seekerName, selectedExpertise } =
+  const { resumeName, resumePdf, resumeSummary, uploadResume, deleteResume, seekerName, selectedExpertise } =
     useMarketplace()
+  const [analyzing, setAnalyzing] = useState(false)
+  const fileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (file.type !== "application/pdf") {
+      alert("Please upload a PDF file.")
+      return
+    }
+
+    setAnalyzing(true)
+    try {
+      // 1. Read file as base64 data URL
+      const reader = new FileReader()
+      reader.onload = async () => {
+        const base64String = reader.result as string
+
+        // 2. Call backend analyze endpoint
+        const formData = new FormData()
+        formData.append("file", file)
+
+        const res = await fetch("/api/resume/analyze", {
+          method: "POST",
+          body: formData,
+        })
+
+        const data = await res.json()
+        if (!res.ok) {
+          throw new Error(data.error || "Failed to analyze resume.")
+        }
+
+        // 3. Upload to state store
+        uploadResume(file.name, base64String, data)
+      }
+      reader.readAsDataURL(file)
+    } catch (err: any) {
+      alert("Error analyzing PDF: " + err.message)
+    } finally {
+      setAnalyzing(false)
+    }
+  }
+
+  const triggerUploadClick = () => {
+    fileInputRef.current?.click()
+  }
 
   return (
     <div className="space-y-6">
@@ -642,8 +689,16 @@ function MyProfile() {
             <h3 className="font-display text-lg font-semibold">Resume</h3>
           </div>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage the resume shared with referrers when you apply.
+            Manage the resume shared with referrers when you apply. Supports real .pdf files.
           </p>
+
+          <input
+            type="file"
+            ref={fileInputRef}
+            className="hidden"
+            accept=".pdf"
+            onChange={handleFileChange}
+          />
 
           {resumeName ? (
             <div className="mt-4 flex flex-col gap-3 rounded-xl border border-border bg-muted/40 p-4 sm:flex-row sm:items-center sm:justify-between">
@@ -654,7 +709,7 @@ function MyProfile() {
                 <div className="min-w-0">
                   <p className="truncate text-sm font-medium">{resumeName}</p>
                   <p className="text-xs text-muted-foreground">
-                    PDF • uploaded
+                    PDF • uploaded & analyzed
                   </p>
                 </div>
               </div>
@@ -662,17 +717,17 @@ function MyProfile() {
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() =>
-                    uploadResume(`Alex_Morgan_Resume_v${Date.now() % 100}.pdf`)
-                  }
+                  onClick={triggerUploadClick}
+                  disabled={analyzing}
                 >
-                  <RefreshCw />
-                  Update / Re-upload
+                  <RefreshCw className={cn(analyzing && "animate-spin")} />
+                  {analyzing ? "Analyzing..." : "Update / Re-upload"}
                 </Button>
                 <Button
                   variant="destructive"
                   size="sm"
                   onClick={deleteResume}
+                  disabled={analyzing}
                   aria-label="Delete resume"
                 >
                   <Trash2 />
@@ -683,14 +738,19 @@ function MyProfile() {
           ) : (
             <button
               type="button"
-              onClick={() => uploadResume("Alex_Morgan_Resume_2026.pdf")}
-              className="mt-4 flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/40 px-4 py-8 text-center transition-colors hover:border-primary/50 hover:bg-muted"
+              onClick={triggerUploadClick}
+              disabled={analyzing}
+              className="mt-4 flex w-full flex-col items-center gap-2 rounded-xl border-2 border-dashed border-border bg-muted/40 px-4 py-8 text-center transition-colors hover:border-primary/50 hover:bg-muted cursor-pointer"
             >
               <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary">
-                <Upload className="size-5" />
+                {analyzing ? (
+                  <RefreshCw className="size-5 animate-spin" />
+                ) : (
+                  <Upload className="size-5" />
+                )}
               </span>
               <span className="text-sm font-medium">
-                No resume on file — click to upload
+                {analyzing ? "Parsing PDF with AI..." : "Upload real resume PDF — click to select"}
               </span>
             </button>
           )}
@@ -702,30 +762,49 @@ function MyProfile() {
 }
 
 function ResumeInsights() {
-  const [analyzing, setAnalyzing] = useState(false)
-  const [analyzed, setAnalyzed] = useState(true)
+  const { resumeSummary } = useMarketplace()
 
-  const triggerAnalysis = () => {
-    setAnalyzing(true)
-    setTimeout(() => {
-      setAnalyzing(false)
-      setAnalyzed(true)
-    }, 1500)
-  }
+  const parsedSkills = useMemo(() => {
+    if (resumeSummary?.skills && resumeSummary.skills.length > 0) {
+      return resumeSummary.skills.map((s: string, idx: number) => {
+        const ratings = [95, 90, 85, 80, 75, 70]
+        const levels = ["Expert", "Expert", "Advanced", "Advanced", "Intermediate", "Intermediate"]
+        const rating = ratings[idx % ratings.length]
+        const level = levels[idx % levels.length]
+        return { name: s, rating, level }
+      })
+    }
+    return [
+      { name: "Node.js", rating: 95, level: "Expert" },
+      { name: "PostgreSQL", rating: 90, level: "Expert" },
+      { name: "React / Next.js", rating: 85, level: "Advanced" },
+      { name: "System Design", rating: 80, level: "Advanced" },
+      { name: "AWS / Cloud", rating: 65, level: "Intermediate" },
+    ]
+  }, [resumeSummary])
 
-  const parsedSkills = [
-    { name: "Node.js", rating: 95, level: "Expert" },
-    { name: "PostgreSQL", rating: 90, level: "Expert" },
-    { name: "React / Next.js", rating: 85, level: "Advanced" },
-    { name: "System Design", rating: 80, level: "Advanced" },
-    { name: "AWS / Cloud", rating: 65, level: "Intermediate" },
+  const strengths = resumeSummary?.strengths || [
+    "Excellent metrics-driven impact (\"40k RPS\")",
+    "Clear ownership of backend scaling path",
+    "Clean, readable formatting and structure"
   ]
 
-  const suggestions = [
-    "Highlight specific database scale (e.g., millions of records, migrations) to align with Backend roles.",
-    "Add more details about Cloud Infrastructure/AWS deployment since many Software Engineering roles require it.",
-    "Draft a shorter pitch: Employee referrers prefer a 2-sentence summary of your most impressive technical achievement.",
+  const weaknesses = resumeSummary?.weaknesses || [
+    "Missing cloud infrastructure credentials",
+    "No direct testing framework mentioned (e.g. Jest)",
+    "Fewer quantifiable metrics (impact percentages)"
   ]
+
+  const suggestions = useMemo(() => {
+    if (resumeSummary?.weaknesses) {
+      return resumeSummary.weaknesses.map((w: string) => `Optimize resume details to resolve: ${w}`)
+    }
+    return [
+      "Highlight specific database scale (e.g., millions of records, migrations) to align with Backend roles.",
+      "Add more details about Cloud Infrastructure/AWS deployment since many Software Engineering roles require it.",
+      "Draft a shorter pitch: Employee referrers prefer a 2-sentence summary of your most impressive technical achievement.",
+    ]
+  }, [resumeSummary])
 
   return (
     <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
@@ -734,97 +813,73 @@ function ResumeInsights() {
           <Sparkles className="size-5 text-primary" />
           <h3 className="font-display text-lg font-semibold">AI Resume Insights</h3>
         </div>
-        {!analyzed && (
-          <Button size="sm" onClick={triggerAnalysis} disabled={analyzing}>
-            {analyzing ? (
-              <>
-                <RefreshCw className="size-4 animate-spin" />
-                Analyzing...
-              </>
-            ) : (
-              "Scan Resume"
-            )}
-          </Button>
-        )}
       </div>
 
-      {analyzing ? (
-        <div className="flex flex-col items-center justify-center py-12 text-center">
-          <RefreshCw className="size-8 animate-spin text-primary" />
-          <p className="mt-4 text-sm font-medium">Extracting resume semantics...</p>
-          <p className="text-xs text-muted-foreground">Matching against 1,200+ industry job descriptions</p>
-        </div>
-      ) : analyzed ? (
-        <div className="mt-6 space-y-6">
-          {/* Skills Chart */}
-          <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
-              Detected Skills & Proficiency
-            </h4>
-            <div className="space-y-3">
-              {parsedSkills.map((skill) => (
-                <div key={skill.name}>
-                  <div className="flex items-center justify-between text-sm mb-1">
-                    <span className="font-medium">{skill.name}</span>
-                    <span className="text-muted-foreground">{skill.level} ({skill.rating}%)</span>
-                  </div>
-                  <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
-                    <div
-                      className="h-full rounded-full bg-primary"
-                      style={{ width: `${skill.rating}%` }}
-                    />
-                  </div>
+      <div className="mt-6 space-y-6">
+        {/* Skills Chart */}
+        <div>
+          <h4 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground mb-3">
+            Detected Skills & Proficiency
+          </h4>
+          <div className="space-y-3">
+            {parsedSkills.map((skill) => (
+              <div key={skill.name}>
+                <div className="flex items-center justify-between text-sm mb-1">
+                  <span className="font-medium">{skill.name}</span>
+                  <span className="text-muted-foreground">{skill.level} ({skill.rating}%)</span>
                 </div>
-              ))}
-            </div>
+                <div className="h-2 w-full rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-primary"
+                    style={{ width: `${skill.rating}%` }}
+                  />
+                </div>
+              </div>
+            ))}
           </div>
+        </div>
 
-          {/* Strengths & Weaknesses */}
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="rounded-xl border border-success/30 bg-success/5 p-4">
-              <h5 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-success mb-2">
-                <CheckCircle2 className="size-4" /> Resume Strengths
-              </h5>
-              <ul className="list-inside list-disc text-sm text-muted-foreground space-y-1">
-                <li>Excellent metrics-driven impact ("40k RPS")</li>
-                <li>Clear ownership of backend scaling path</li>
-                <li>Clean, readable formatting and structure</li>
-              </ul>
-            </div>
-            <div className="rounded-xl border border-warning/30 bg-warning/5 p-4">
-              <h5 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-500 mb-2">
-                <Clock className="size-4" /> Optimization Areas
-              </h5>
-              <ul className="list-inside list-disc text-sm text-muted-foreground space-y-1">
-                <li>Missing cloud architecture credentials</li>
-                <li>No direct testing framework mentioned (e.g. Jest)</li>
-                <li>Relatively brief description for your SDE II role</li>
-              </ul>
-            </div>
-          </div>
-
-          {/* Recommendations */}
-          <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
-            <h5 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary mb-2">
-              <Sparkles className="size-4" /> Next Steps to Maximize Referral Rate
+        {/* Strengths & Weaknesses */}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-xl border border-success/30 bg-success/5 p-4">
+            <h5 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-success mb-2">
+              <CheckCircle2 className="size-4" /> Resume Strengths
             </h5>
-            <ul className="space-y-2 text-sm text-muted-foreground">
-              {suggestions.map((s, idx) => (
-                <li key={idx} className="flex gap-2">
-                  <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary animate-pulse">
-                    {idx + 1}
-                  </span>
-                  <span>{s}</span>
-                </li>
+            <ul className="list-inside list-disc text-sm text-muted-foreground space-y-1">
+              {strengths.map((str, idx) => (
+                <li key={idx} className="text-pretty">{str}</li>
+              ))}
+            </ul>
+          </div>
+          <div className="rounded-xl border border-warning/30 bg-warning/5 p-4">
+            <h5 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-amber-500 mb-2">
+              <Clock className="size-4" /> Optimization Areas
+            </h5>
+            <ul className="list-inside list-disc text-sm text-muted-foreground space-y-1">
+              {weaknesses.map((weak, idx) => (
+                <li key={idx} className="text-pretty">{weak}</li>
               ))}
             </ul>
           </div>
         </div>
-      ) : (
-        <p className="mt-4 text-sm text-muted-foreground text-center py-6">
-          Scan your resume to unlock matching metrics, skills breakdown, and recommendations.
-        </p>
-      )}
+
+        {/* Recommendations */}
+        <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+          <h5 className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-primary mb-2">
+            <Sparkles className="size-4" /> Next Steps to Maximize Referral Rate
+          </h5>
+          <ul className="space-y-2 text-sm text-muted-foreground">
+            {suggestions.map((s, idx) => (
+              <li key={idx} className="flex gap-2">
+                <span className="flex size-5 shrink-0 items-center justify-center rounded-full bg-primary/10 text-xs font-bold text-primary">
+                  {idx + 1}
+                </span>
+                <span className="text-pretty">{s}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      </div>
     </div>
   )
 }
