@@ -23,7 +23,7 @@ import {
   X,
   Sparkles,
 } from "lucide-react"
-import { useState, useMemo, useRef } from "react"
+import { useState, useMemo, useRef, useEffect } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -34,6 +34,8 @@ import {
   useMarketplace,
   type ApplicationStatus,
   type Job,
+  CATEGORIES,
+  type Category,
 } from "@/lib/marketplace-store"
 
 type Tab = "feed" | "applications" | "profile"
@@ -45,7 +47,7 @@ const TABS: { id: Tab; label: string; icon: typeof Briefcase }[] = [
 ]
 
 export function SeekerDashboard() {
-  const { tokensRemaining, maxTokens, selectedExpertise } = useMarketplace()
+  const { tokensRemaining, maxTokens, selectedExpertise, currentUser } = useMarketplace()
   const [tab, setTab] = useState<Tab>("feed")
 
   return (
@@ -68,6 +70,18 @@ export function SeekerDashboard() {
           </span>
         </div>
       </div>
+
+      {currentUser && currentUser.profileCompletion < 80 && (
+        <div className="mb-6 rounded-2xl border border-amber-500/20 bg-amber-500/5 p-4 text-amber-600 dark:text-amber-400 flex items-start gap-3">
+          <Zap className="size-5 shrink-0 mt-0.5 animate-pulse" />
+          <div>
+            <h4 className="font-semibold text-sm">Profile Incomplete ({currentUser.profileCompletion}%)</h4>
+            <p className="text-xs mt-1">
+              You must complete at least 80% of your profile to submit referral applications. Please upload your resume PDF in the Profile tab.
+            </p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="mb-6 flex gap-1 overflow-x-auto rounded-xl border border-border bg-card p-1">
@@ -99,13 +113,21 @@ export function SeekerDashboard() {
 /* ---------------- Job Feed ---------------- */
 
 function JobFeed() {
-  const { jobs, selectedExpertise, setView } = useMarketplace()
+  const { jobs, selectedExpertise, setView, loadJobs } = useMarketplace()
   const [applyJob, setApplyJob] = useState<Job | null>(null)
   
   // Search & Filter state
   const [searchQuery, setSearchQuery] = useState("")
   const [onlyBounty, setOnlyBounty] = useState(false)
   const [sortBy, setSortBy] = useState<"newest" | "bounty-desc" | "title-asc">("newest")
+
+  useEffect(() => {
+    loadJobs({
+      query: searchQuery,
+      sortBy: sortBy === "bounty-desc" ? "bounty" : sortBy === "title-asc" ? "alphabetical" : "newest",
+      bountiesOnly: onlyBounty
+    })
+  }, [searchQuery, sortBy, onlyBounty])
 
   const filtered = useMemo(() => {
     let result = selectedExpertise.length > 0
@@ -229,12 +251,31 @@ function JobFeed() {
 }
 
 function JobCard({ job, onApply }: { job: Job; onApply: () => void }) {
-  const { hasApplied, tokensRemaining } = useMarketplace()
+  const { hasApplied, tokensRemaining, currentUser } = useMarketplace()
   const applied = hasApplied(job.id)
   const outOfTokens = tokensRemaining <= 0
+  const profileIncomplete = currentUser && currentUser.profileCompletion < 80
+
+  const [logoFailed, setLogoFailed] = useState(false)
+  const companyName = job.companyName || "Anonymous"
+
+  const getLogoUrl = () => {
+    if (!job.companyUrl) return null
+    try {
+      const domain = job.companyUrl
+        .replace(/https?:\/\//, "")
+        .replace(/www\./, "")
+        .split("/")[0]
+      return `https://logo.clearbit.com/${domain}`
+    } catch (e) {
+      return null
+    }
+  }
+
+  const logoUrl = getLogoUrl()
 
   return (
-    <article className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-sm transition-shadow hover:shadow-md">
+    <article className="flex flex-col rounded-2xl border border-border bg-card p-5 shadow-md hover:shadow-xl hover:-translate-y-1 transition-all duration-300 cursor-pointer">
       <div className="flex items-start justify-between gap-2">
         <Badge variant="secondary">{job.category}</Badge>
         {job.bounty ? (
@@ -245,41 +286,72 @@ function JobCard({ job, onApply }: { job: Job; onApply: () => void }) {
         ) : null}
       </div>
 
-      <h3 className="mt-3 font-display text-lg font-semibold leading-snug text-balance">
-        {job.title}
-      </h3>
+      {/* Company Logo Header (Requirement 3) */}
+      <div className="flex items-center gap-3 mt-4">
+        {logoUrl && !logoFailed ? (
+          <img
+            src={logoUrl}
+            alt={`${companyName} logo`}
+            onError={() => setLogoFailed(true)}
+            className="size-11 rounded-xl object-contain border border-border bg-white p-1 shadow-sm"
+          />
+        ) : (
+          <div className="flex size-11 items-center justify-center rounded-xl bg-primary/10 font-display font-bold text-primary border border-border text-sm">
+            {companyName.charAt(0).toUpperCase()}
+          </div>
+        )}
+        <div className="flex-1 min-w-0">
+          {/* Company Name First */}
+          <h4 className="font-display text-xs font-bold text-primary uppercase tracking-wider truncate">
+            {companyName}
+          </h4>
+          {/* Job Role Second */}
+          <h3 className="font-display text-sm font-bold text-foreground leading-snug truncate mt-0.5">
+            {job.title}
+          </h3>
+          {/* Location & Type Third */}
+          <p className="text-[11px] text-muted-foreground font-semibold truncate mt-0.5 capitalize">
+            {companyName} • {job.location || "Location"} • {job.workModel || "Remote"}
+          </p>
+        </div>
+      </div>
 
-      <dl className="mt-3 space-y-2 text-sm">
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Building2 className="size-4 shrink-0" />
+      <dl className="mt-4 space-y-2 text-sm border-t border-border/60 pt-3">
+        <div className="flex items-center gap-2 text-muted-foreground text-xs">
+          <Building2 className="size-3.5 shrink-0" />
           <span>{job.industry}</span>
         </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <UserRound className="size-4 shrink-0" />
+        <div className="flex items-center gap-2 text-muted-foreground text-xs">
+          <UserRound className="size-3.5 shrink-0" />
           <span>{job.companySize} employees</span>
         </div>
-        <div className="flex items-center gap-2 text-muted-foreground">
-          <Wrench className="size-4 shrink-0" />
-          <span>{job.stack}</span>
+        <div className="flex items-center gap-2 text-muted-foreground text-xs">
+          <Wrench className="size-3.5 shrink-0" />
+          <span className="truncate">{job.stack}</span>
         </div>
       </dl>
 
-      <div className="mt-3 flex items-center gap-1.5 text-xs text-muted-foreground">
-        <span className="flex size-5 items-center justify-center rounded-full bg-muted font-medium">
+      <div className="mt-4 flex items-center gap-1.5 text-xs text-muted-foreground">
+        <span className="flex size-5 items-center justify-center rounded-full bg-muted font-medium text-[10px]">
           {job.postedBy.slice(-2)}
         </span>
-        Posted by {job.postedBy}
+        <span>Posted by {job.postedBy}</span>
       </div>
 
       <div className="mt-auto pt-4">
         <Button
-          className="w-full"
-          onClick={onApply}
-          disabled={applied || outOfTokens}
+          className="w-full shadow-sm hover:shadow-md transition-shadow cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation()
+            onApply()
+          }}
+          disabled={applied || outOfTokens || profileIncomplete}
           variant={applied ? "secondary" : "default"}
         >
           {applied ? (
             "Applied"
+          ) : profileIncomplete ? (
+            "Complete Profile (Min 80%)"
           ) : (
             <>
               <Zap />
@@ -304,14 +376,14 @@ function ApplyModal({
   job: Job | null
   onClose: () => void
 }) {
-  const { applyToJob } = useMarketplace()
+  const { applyToJob, currentUser } = useMarketplace()
   const [pitch, setPitch] = useState("")
   const [error, setError] = useState<string | null>(null)
   const max = 200
 
-  const submit = () => {
+  const submit = async () => {
     if (!job) return
-    const res = applyToJob(job.id, pitch.trim())
+    const res = await applyToJob(job.id, pitch.trim())
     if (!res.ok) {
       setError(res.reason ?? "Something went wrong.")
       return
@@ -320,6 +392,8 @@ function ApplyModal({
     setError(null)
     onClose()
   }
+
+  const profileIncomplete = currentUser && currentUser.profileCompletion < 80
 
   return (
     <Modal
@@ -375,6 +449,10 @@ function ApplyModal({
 
           {error ? (
             <p className="text-sm text-destructive">{error}</p>
+          ) : profileIncomplete ? (
+            <p className="text-xs text-amber-500 font-semibold">
+              You must complete your profile to at least 80% before submitting.
+            </p>
           ) : (
             <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
               <MousePointerClick className="size-3.5" />
@@ -389,7 +467,7 @@ function ApplyModal({
             <Button
               className="flex-1"
               onClick={submit}
-              disabled={pitch.trim().length === 0}
+              disabled={pitch.trim().length === 0 || profileIncomplete}
             >
               <Zap />
               Finalize Application
@@ -456,21 +534,25 @@ function ChatBox({
         ) : (
           appMessages.map((m) => {
             const isSelf = m.sender === role
+            const isSeekerMsg = m.senderRole === "seeker" || m.sender === "seeker"
             return (
               <div
                 key={m.id}
                 className={cn(
                   "flex flex-col max-w-[80%] rounded-2xl px-3 py-1.5 text-xs",
                   isSelf
-                    ? "bg-primary text-primary-foreground self-end rounded-tr-none"
-                    : "bg-muted text-foreground self-start rounded-tl-none"
+                    ? "self-end rounded-tr-none"
+                    : "self-start rounded-tl-none",
+                  isSeekerMsg
+                    ? "bg-blue-600 text-white"
+                    : "bg-emerald-600 text-white"
                 )}
               >
-                <span className="text-[9px] font-semibold opacity-70 mb-0.5">
-                  {isSelf ? "You" : role === "seeker" ? "Employee" : "Candidate"}
+                <span className="text-[9px] font-semibold opacity-80 mb-0.5">
+                  {isSeekerMsg ? "Seeker" : "Employee"} {isSelf ? "(You)" : ""}
                 </span>
                 <p className="leading-normal">{m.text}</p>
-                <span className="text-[8px] opacity-50 self-end mt-0.5">
+                <span className="text-[8px] opacity-60 self-end mt-0.5">
                   {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </span>
               </div>
@@ -500,8 +582,11 @@ function ChatBox({
 }
 
 function MyApplications() {
-  const { applications, seekerName, setView } = useMarketplace()
-  const mine = applications.filter((a) => a.candidateName === seekerName)
+  const { applications, currentUser, setView } = useMarketplace()
+  const mine = useMemo(() => {
+    if (!currentUser) return []
+    return applications.filter((a) => a.candidateEmail.toLowerCase() === currentUser.email.toLowerCase())
+  }, [applications, currentUser])
   const [activeChatAppId, setActiveChatAppId] = useState<number | null>(null)
 
   if (mine.length === 0) {
@@ -604,9 +689,11 @@ function ExpiryCountdown({ appliedAt }: { appliedAt: number }) {
 /* ---------------- My Profile ---------------- */
 
 function MyProfile() {
-  const { resumeName, resumePdf, resumeSummary, uploadResume, deleteResume, seekerName, selectedExpertise } =
+  const { resumeName, resumePdf, resumeSummary, uploadResume, deleteResume, selectedExpertise, setSelectedExpertise, currentUser } =
     useMarketplace()
   const [analyzing, setAnalyzing] = useState(false)
+  const [showOtherInput, setShowOtherInput] = useState(false)
+  const [customExpertiseText, setCustomExpertiseText] = useState("")
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -654,22 +741,31 @@ function MyProfile() {
     fileInputRef.current?.click()
   }
 
+  const getInitials = () => {
+    if (!currentUser?.name) return "S"
+    return currentUser.name
+      .split(" ")
+      .map((n: string) => n[0])
+      .join("")
+      .toUpperCase()
+  }
+
   return (
     <div className="space-y-6">
       <div className="grid gap-4 lg:grid-cols-3">
         <div className="rounded-2xl border border-border bg-card p-6 shadow-sm">
           <div className="flex items-center gap-3">
             <span className="flex size-12 items-center justify-center rounded-full bg-primary/10 font-display text-lg font-bold text-primary">
-              AM
+              {getInitials()}
             </span>
             <div>
-              <p className="font-semibold">{seekerName}</p>
+              <p className="font-semibold">{currentUser?.name || "Active Seeker"}</p>
               <p className="text-sm text-muted-foreground">Job Seeker</p>
             </div>
           </div>
           <div className="mt-4 border-t border-border pt-4">
             <p className="mb-2 text-sm font-medium">Expertise</p>
-            <div className="flex flex-wrap gap-1.5">
+            <div className="flex flex-wrap gap-1.5 mb-3">
               {selectedExpertise.length > 0 ? (
                 selectedExpertise.map((c) => (
                   <Badge key={c} variant="secondary">
@@ -678,6 +774,86 @@ function MyProfile() {
                 ))
               ) : (
                 <span className="text-sm text-muted-foreground">None selected</span>
+              )}
+            </div>
+            {/* Categories Selector */}
+            <div className="mt-3">
+              <p className="text-[10px] text-muted-foreground uppercase font-semibold mb-1.5">Select Categories</p>
+              <div className="flex flex-wrap gap-1 border rounded-lg p-1.5 bg-muted/20">
+                {CATEGORIES.map((c) => {
+                  const active = selectedExpertise.includes(c)
+                  return (
+                    <button
+                      key={c}
+                      type="button"
+                      onClick={async () => {
+                        const updated = active
+                          ? selectedExpertise.filter((x) => x !== c)
+                          : [...selectedExpertise, c]
+                        setSelectedExpertise(updated)
+                        // Sync with backend profile
+                        await fetch("/api/auth/me", {
+                          method: "POST",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ selectedExpertise: updated }),
+                        })
+                      }}
+                      className={cn(
+                        "rounded-full px-2 py-0.5 text-[10px] font-medium border transition-colors cursor-pointer",
+                        active ? "bg-primary text-primary-foreground border-primary" : "text-muted-foreground hover:text-foreground border-border bg-card"
+                      )}
+                    >
+                      {c}
+                    </button>
+                  )
+                })}
+                {/* Others Toggle */}
+                <button
+                  type="button"
+                  onClick={() => setShowOtherInput(!showOtherInput)}
+                  className={cn(
+                    "rounded-full px-2 py-0.5 text-[10px] font-medium border transition-colors cursor-pointer",
+                    showOtherInput ? "bg-accent text-accent-foreground border-accent" : "text-muted-foreground hover:text-foreground border-border bg-card"
+                  )}
+                >
+                  Others
+                </button>
+              </div>
+
+              {/* Custom Input */}
+              {showOtherInput && (
+                <div className="mt-2 flex gap-1.5">
+                  <input
+                    type="text"
+                    placeholder="Enter custom expertise..."
+                    value={customExpertiseText}
+                    onChange={(e) => setCustomExpertiseText(e.target.value)}
+                    className="flex-1 rounded-xl border border-input bg-background px-3 py-1 text-xs outline-none focus-visible:border-ring"
+                  />
+                  <Button
+                    size="sm"
+                    onClick={async () => {
+                      if (customExpertiseText.trim()) {
+                        const val = customExpertiseText.trim()
+                        if (!selectedExpertise.includes(val)) {
+                          const updated = [...selectedExpertise, val]
+                          setSelectedExpertise(updated)
+                          // Sync with backend profile
+                          await fetch("/api/auth/me", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ selectedExpertise: updated }),
+                          })
+                        }
+                        setCustomExpertiseText("")
+                        setShowOtherInput(false)
+                      }
+                    }}
+                    className="cursor-pointer font-semibold"
+                  >
+                    Add
+                  </Button>
+                </div>
               )}
             </div>
           </div>

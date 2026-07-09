@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
-import { verifyOTP } from "@/lib/db"
+import { verifyOTPRecord, updateUser, saveAuditLog } from "@/lib/database"
+import { getAuditData } from "@/lib/auth-utils"
 
 export async function POST(request: Request) {
   try {
@@ -12,7 +13,8 @@ export async function POST(request: Request) {
       )
     }
 
-    const verificationResult = verifyOTP(email, code)
+    const cleanEmail = email.toLowerCase().trim()
+    const verificationResult = verifyOTPRecord(cleanEmail, code, "otp")
 
     if (!verificationResult.ok) {
       return NextResponse.json(
@@ -21,9 +23,16 @@ export async function POST(request: Request) {
       )
     }
 
+    // Update user isVerified status in database
+    updateUser(cleanEmail, { isVerified: true })
+
+    // Log verification action
+    const { ip, device, browser } = getAuditData(request)
+    saveAuditLog(cleanEmail, "Email Verification Successful (OTP)", ip, device, browser)
+
     return NextResponse.json({
       success: true,
-      message: "Email domain authenticated successfully!",
+      message: "Email verified successfully! You can now log in.",
     })
   } catch (error: any) {
     console.error("Error in verifying OTP API:", error)

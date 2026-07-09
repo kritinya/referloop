@@ -7,6 +7,7 @@ import { CheckCircle2, AlertCircle, Info, X } from "lucide-react"
 import { EmployeeDashboard } from "@/components/marketplace/employee-dashboard"
 import { Landing } from "@/components/marketplace/landing"
 import { SeekerDashboard } from "@/components/marketplace/seeker-dashboard"
+import { AdminPanel } from "@/components/marketplace/admin-panel"
 import { TopNav } from "@/components/marketplace/top-nav"
 import { MarketplaceProvider, useMarketplace } from "@/lib/marketplace-store"
 import { cn } from "@/lib/utils"
@@ -77,6 +78,7 @@ function Router() {
       {view === "home" && <Landing />}
       {view === "seeker" && <SeekerDashboard />}
       {view === "employee" && <EmployeeDashboard />}
+      {view === "admin" && <AdminPanel />}
       <Toaster />
       <Chatbot />
     </main>

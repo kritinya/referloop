@@ -1,5 +1,3 @@
-"use client"
-
 import {
   createContext,
   useContext,
@@ -20,7 +18,14 @@ export const CATEGORIES = [
   "Operations",
 ] as const
 
-export type Category = (typeof CATEGORIES)[number]
+export type Category = (typeof CATEGORIES)[number] | string
+
+export const STATUS_LABELS = {
+  pending: { seeker: "Requested", employee: "Review" },
+  shortlisted: { seeker: "Shortlisted", employee: "Accepted" },
+  referred: { seeker: "Referred", employee: "Referred" },
+  rejected: { seeker: "Rejected", employee: "Rejected" },
+} as const
 
 export type Job = {
   id: number
@@ -31,9 +36,13 @@ export type Job = {
   stack: string
   postedBy: string
   bounty: string | null
+  jdFileName?: string | null
+  jdFileBase64?: string | null
+  rules?: string | null
+  expiresAt: number
 }
 
-export type ApplicationStatus = "pending" | "shortlisted" | "referred"
+export type ApplicationStatus = "pending" | "shortlisted" | "referred" | "rejected"
 
 export type Application = {
   id: number
@@ -41,13 +50,16 @@ export type Application = {
   jobTitle: string
   category: Category
   candidateName: string
+  candidateEmail: string
   primarySkill: string
   pitch: string
   matchScore: number
   status: ApplicationStatus
-  appliedAt: number // timestamp (ms)
+  appliedAt: number
   resumePdf?: string | null
-  resumeSummary?: any | null
+  resumeName?: string | null
+  coverLetterPdf?: string | null
+  coverLetterName?: string | null
 }
 
 export type Message = {
@@ -64,7 +76,7 @@ export type Toast = {
   type: "success" | "info" | "error"
 }
 
-export type View = "home" | "seeker" | "employee"
+export type View = "home" | "seeker" | "employee" | "admin"
 
 type MarketplaceState = {
   view: View
@@ -73,261 +85,231 @@ type MarketplaceState = {
   jobs: Job[]
   applications: Application[]
 
-  // seeker
+  // Auth State
+  currentUser: any | null
+  fetchCurrentUser: () => Promise<void>
+  login: (credentials: any) => Promise<{ ok: boolean; error?: string; notVerified?: boolean }>
+  register: (data: any) => Promise<{ ok: boolean; error?: string; mockCode?: string }>
+  logout: () => Promise<void>
+
+  // Seeker State
   tokensRemaining: number
   maxTokens: number
   resumeName: string | null
   resumePdf: string | null
   resumeSummary: any | null
   selectedExpertise: Category[]
-  seekerName: string
 
   setSelectedExpertise: (c: Category[]) => void
   uploadResume: (name: string, pdfBase64: string, summary: any) => void
   deleteResume: () => void
-  enterSeeker: (expertise: Category[], resume: string, resumePdf: string | null, resumeSummary: any | null) => void
+  enterSeeker: (expertise: Category[], resume: string, resumePdfVal: string | null, resumeSummaryVal: any | null) => void
 
-  applyToJob: (jobId: number, pitch: string) => { ok: boolean; reason?: string }
+  applyToJob: (jobId: number, pitch: string) => Promise<{ ok: boolean; reason?: string }>
   hasApplied: (jobId: number) => boolean
 
-  // employee
   postJob: (input: {
     title: string
     category: Category
     companySize: string
     stack: string
     bounty: string | null
-  }) => void
-  updateApplicationStatus: (id: number, status: ApplicationStatus) => void
+    jdFileName?: string | null
+    jdFileBase64?: string | null
+    rules?: string | null
+    companyName: string
+    companyUrl: string
+    location: string
+    workModel: "remote" | "hybrid" | "on-site"
+    description: string
+  }) => Promise<{ ok: boolean; error?: string }>
+  updateJob: (id: number, input: {
+    title: string
+    category: Category
+    companySize: string
+    stack: string
+    bounty: string | null
+    jdFileName?: string | null
+    jdFileBase64?: string | null
+    rules?: string | null
+    companyName: string
+    companyUrl: string
+    location: string
+    workModel: "remote" | "hybrid" | "on-site"
+    description: string
+  }) => Promise<{ ok: boolean; error?: string }>
+  deleteJob: (id: number) => Promise<{ ok: boolean; error?: string }>
+  updateApplicationStatus: (id: number, status: ApplicationStatus) => Promise<void>
 
-  // verified email
+  // Verified Email (compatibility wrapper)
   verifiedEmail: string | null
   setVerifiedEmail: (email: string | null) => void
 
-  // messages
+  // Messages
   messages: Message[]
-  sendMessage: (applicationId: number, sender: "seeker" | "employee", text: string) => void
+  sendMessage: (applicationId: number, sender: "seeker" | "employee", text: string) => Promise<void>
+  loadMessages: (applicationId: number) => Promise<void>
 
-  // toasts
+  // Toasts
   toasts: Toast[]
   addToast: (message: string, type?: "success" | "info" | "error") => void
   removeToast: (id: number) => void
 
-  // confetti trigger
+  // Confetti
   confettiTrigger: number
   triggerConfetti: () => void
+
+  // Admin Data
+  adminData: any | null
+  fetchAdminData: () => Promise<void>
+  updateUserByAdmin: (email: string, verified: boolean, role: string) => Promise<void>
+
+  // Operations
+  loadJobs: (params?: { query?: string; category?: string; sortBy?: string; bountiesOnly?: boolean }) => Promise<void>
+  loadApplications: () => Promise<void>
 }
 
 const MarketplaceContext = createContext<MarketplaceState | null>(null)
 
-const INITIAL_JOBS: Job[] = [
-  {
-    id: 1,
-    title: "Backend SDE II",
-    category: "Software Engineering",
-    industry: "E-Commerce",
-    companySize: "1,000–5,000",
-    stack: "Node.js, Postgres",
-    postedBy: "Anon_01",
-    bounty: "$50 Amazon Card",
-  },
-  {
-    id: 2,
-    title: "LLM Researcher",
-    category: "Data & AI",
-    industry: "AI Startup",
-    companySize: "11–50",
-    stack: "Python, PyTorch",
-    postedBy: "Anon_02",
-    bounty: null,
-  },
-  {
-    id: 3,
-    title: "Growth Product Manager",
-    category: "Product",
-    industry: "Fintech",
-    companySize: "200–500",
-    stack: "Mixpanel, Jira",
-    postedBy: "Anon_03",
-    bounty: "$100 Bonus",
-  },
-  {
-    id: 4,
-    title: "Senior UX Researcher",
-    category: "Design",
-    industry: "SaaS",
-    companySize: "500–1,000",
-    stack: "Figma, UserTesting",
-    postedBy: "Anon_04",
-    bounty: null,
-  },
-  {
-    id: 5,
-    title: "Performance Marketing Lead",
-    category: "Marketing",
-    industry: "D2C Retail",
-    companySize: "50–200",
-    stack: "Meta Ads, GA4",
-    postedBy: "Anon_05",
-    bounty: null,
-  },
-  {
-    id: 6,
-    title: "Enterprise Account Executive",
-    category: "Sales",
-    industry: "Cloud Infrastructure",
-    companySize: "5,000+",
-    stack: "Salesforce, Outreach",
-    postedBy: "Anon_06",
-    bounty: "$200 Gift Card",
-  },
-  {
-    id: 7,
-    title: "FP&A Analyst",
-    category: "Finance",
-    industry: "Banking",
-    companySize: "5,000+",
-    stack: "Excel, Tableau",
-    postedBy: "Anon_07",
-    bounty: null,
-  },
-  {
-    id: 8,
-    title: "Supply Chain Manager",
-    category: "Operations",
-    industry: "Logistics",
-    companySize: "1,000–5,000",
-    stack: "SAP, SQL",
-    postedBy: "Anon_08",
-    bounty: null,
-  },
-]
-
-const DAY = 24 * 60 * 60 * 1000
-
-const INITIAL_APPLICATIONS: Application[] = [
-  {
-    id: 1001,
-    jobId: 1,
-    jobTitle: "Backend SDE II",
-    category: "Software Engineering",
-    candidateName: "Priya Nair",
-    primarySkill: "Distributed Systems",
-    pitch:
-      "Scaled a payments service to 40k RPS on Node.js + Postgres. I obsess over p99 latency and clean migrations.",
-    matchScore: 92,
-    status: "pending",
-    appliedAt: Date.now() - 1 * DAY,
-  },
-  {
-    id: 1002,
-    jobId: 1,
-    jobTitle: "Backend SDE II",
-    category: "Software Engineering",
-    candidateName: "Marcus Lee",
-    primarySkill: "API Design",
-    pitch:
-      "Led the redesign of a monolith into 6 services. Strong on idempotency, queues, and observability.",
-    matchScore: 78,
-    status: "shortlisted",
-    appliedAt: Date.now() - 3 * DAY,
-  },
-  {
-    id: 1003,
-    jobId: 3,
-    jobTitle: "Growth Product Manager",
-    category: "Product",
-    candidateName: "Sofia Ramos",
-    primarySkill: "Activation Funnels",
-    pitch:
-      "Grew onboarding activation 34% via experiment velocity. I live in Mixpanel and ship weekly.",
-    matchScore: 88,
-    status: "referred",
-    appliedAt: Date.now() - 5 * DAY,
-  },
-]
-
-const PITCH_SNIPPETS = [
-  "I ship fast and measure everything — happy to walk through my last launch.",
-  "Deep expertise in this exact stack with a track record of ownership.",
-  "I thrive in ambiguous, high-growth environments and love hard problems.",
-]
-
-function randomMatchScore() {
-  return Math.floor(70 + Math.random() * 29) // 70–98
-}
-
 export function MarketplaceProvider({ children }: { children: ReactNode }) {
   const [view, setView] = useState<View>("home")
-  const [jobs, setJobs] = useState<Job[]>(INITIAL_JOBS)
-  const [applications, setApplications] = useState<Application[]>(INITIAL_APPLICATIONS)
+  const [jobs, setJobs] = useState<Job[]>([])
+  const [applications, setApplications] = useState<Application[]>([])
+  const [currentUser, setCurrentUser] = useState<any | null>(null)
 
-  const [tokensRemaining, setTokensRemaining] = useState(4)
+  // Seeker states
+  const [tokensRemaining, setTokensRemaining] = useState(5)
   const maxTokens = 5
   const [resumeName, setResumeName] = useState<string | null>(null)
   const [resumePdf, setResumePdf] = useState<string | null>(null)
   const [resumeSummary, setResumeSummary] = useState<any | null>(null)
   const [selectedExpertise, setSelectedExpertise] = useState<Category[]>([])
-  const seekerName = "You (Alex Morgan)"
 
-  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null)
+  // Compatibility email verified state
+  const [verifiedEmail, setVerifiedEmailState] = useState<string | null>(null)
+
   const [messages, setMessages] = useState<Message[]>([])
   const [toasts, setToasts] = useState<Toast[]>([])
   const [confettiTrigger, setConfettiTrigger] = useState(0)
-
+  const [adminData, setAdminData] = useState<any | null>(null)
   const [hydrated, setHydrated] = useState(false)
 
-  // Load state from localStorage on client-side mount
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      try {
-        const savedView = localStorage.getItem("backchannel_view")
-        const savedJobs = localStorage.getItem("backchannel_jobs")
-        const savedApps = localStorage.getItem("backchannel_applications")
-        const savedTokens = localStorage.getItem("backchannel_tokens")
-        const savedResume = localStorage.getItem("backchannel_resume")
-        const savedResumePdf = localStorage.getItem("backchannel_resume_pdf")
-        const savedResumeSummary = localStorage.getItem("backchannel_resume_summary")
-        const savedExpertise = localStorage.getItem("backchannel_expertise")
-        const savedEmail = localStorage.getItem("backchannel_email")
-        const savedMsgs = localStorage.getItem("backchannel_messages")
-
-        if (savedView) setView(savedView as View)
-        if (savedJobs) setJobs(JSON.parse(savedJobs))
-        if (savedApps) setApplications(JSON.parse(savedApps))
-        if (savedTokens) setTokensRemaining(Number(savedTokens))
-        if (savedResume) setResumeName(savedResume === "" ? null : savedResume)
-        if (savedResumePdf) setResumePdf(savedResumePdf === "" ? null : savedResumePdf)
-        if (savedResumeSummary) setResumeSummary(savedResumeSummary === "" ? null : JSON.parse(savedResumeSummary))
-        if (savedExpertise) setSelectedExpertise(JSON.parse(savedExpertise))
-        if (savedEmail) setVerifiedEmail(savedEmail === "" ? null : savedEmail)
-        if (savedMsgs) setMessages(JSON.parse(savedMsgs))
-      } catch (e) {
-        console.error("Failed to restore state from localStorage:", e)
-      } finally {
-        setHydrated(true)
+  // 1. Fetch authenticated user details
+  const fetchCurrentUser = async () => {
+    try {
+      const res = await fetch("/api/auth/me")
+      const data = await res.json()
+      if (data.authenticated) {
+        setCurrentUser(data.user)
+        setVerifiedEmailState(data.user.role === "employee" ? data.user.email : null)
+        if (data.user.role === "seeker") {
+          setTokensRemaining(data.user.tokensRemaining !== undefined ? data.user.tokensRemaining : 5)
+        }
+      } else {
+        setCurrentUser(null)
+        setVerifiedEmailState(null)
       }
+    } catch (e) {
+      console.error("Failed to fetch session:", e)
+    } finally {
+      setHydrated(true)
     }
+  }
+
+  // 2. Fetch jobs postings from backend
+  const loadJobs = async (params?: { query?: string; category?: string; sortBy?: string; bountiesOnly?: boolean }) => {
+    try {
+      const queryParams = new URLSearchParams()
+      if (params?.query) queryParams.set("query", params.query)
+      if (params?.category) queryParams.set("category", params.category)
+      if (params?.sortBy) queryParams.set("sortBy", params.sortBy)
+      if (params?.bountiesOnly) queryParams.set("bountiesOnly", String(params.bountiesOnly))
+
+      const res = await fetch(`/api/jobs?${queryParams.toString()}`)
+      const data = await res.json()
+      if (res.ok) {
+        setJobs(data.jobs || [])
+      }
+    } catch (e) {
+      console.error("Failed to load listings:", e)
+    }
+  }
+
+  // 3. Fetch applications queue
+  const loadApplications = async () => {
+    try {
+      const res = await fetch("/api/applications")
+      const data = await res.json()
+      if (res.ok) {
+        setApplications(data.applications || [])
+      }
+    } catch (e) {
+      console.error("Failed to load applications:", e)
+    }
+  }
+
+  // 4. Fetch admin statistics
+  const fetchAdminData = async () => {
+    try {
+      const res = await fetch("/api/admin")
+      const data = await res.json()
+      if (res.ok) {
+        setAdminData(data)
+      }
+    } catch (e) {
+      console.error("Failed to load admin stats:", e)
+    }
+  }
+
+  const updateUserByAdmin = async (email: string, verified: boolean, role: string) => {
+    try {
+      const res = await fetch("/api/admin", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email, verified, role }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        addToast("User configuration updated by admin.", "success")
+        fetchAdminData()
+      } else {
+        addToast(data.error || "Failed to update user.", "error")
+      }
+    } catch (e: any) {
+      addToast(e.message, "error")
+    }
+  }
+
+  // 5. Fetch messages for an application
+  const loadMessages = async (applicationId: number) => {
+    try {
+      const res = await fetch(`/api/messages?applicationId=${applicationId}`)
+      const data = await res.json()
+      if (res.ok) {
+        setMessages(data.messages || [])
+      }
+    } catch (e) {
+      console.error("Failed to load messages:", e)
+    }
+  }
+
+  // Initialize
+  useEffect(() => {
+    fetchCurrentUser()
+    loadJobs()
   }, [])
 
-  // Sync state to localStorage when changes occur
+  // Dynamic Polling for real-time updates (Task 14)
   useEffect(() => {
-    if (!hydrated) return
-    try {
-      localStorage.setItem("backchannel_view", view)
-      localStorage.setItem("backchannel_jobs", JSON.stringify(jobs))
-      localStorage.setItem("backchannel_applications", JSON.stringify(applications))
-      localStorage.setItem("backchannel_tokens", String(tokensRemaining))
-      localStorage.setItem("backchannel_resume", resumeName || "")
-      localStorage.setItem("backchannel_resume_pdf", resumePdf || "")
-      localStorage.setItem("backchannel_resume_summary", resumeSummary ? JSON.stringify(resumeSummary) : "")
-      localStorage.setItem("backchannel_expertise", JSON.stringify(selectedExpertise))
-      localStorage.setItem("backchannel_email", verifiedEmail || "")
-      localStorage.setItem("backchannel_messages", JSON.stringify(messages))
-    } catch (e) {
-      console.error("Failed to save state to localStorage:", e)
-    }
-  }, [hydrated, view, jobs, applications, tokensRemaining, resumeName, resumePdf, resumeSummary, selectedExpertise, verifiedEmail, messages])
+    if (!currentUser) return
+    loadApplications()
+
+    const interval = setInterval(() => {
+      loadApplications()
+    }, 5000)
+
+    return () => clearInterval(interval)
+  }, [currentUser])
 
   const addToast = (message: string, type: "success" | "info" | "error" = "success") => {
     const id = Date.now() + Math.random()
@@ -345,36 +327,148 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
     setConfettiTrigger((prev) => prev + 1)
   }
 
+  const protectedSetView = (v: View) => {
+    if (currentUser?.role === "admin") {
+      setView(v)
+      return
+    }
+
+    if (v === "employee") {
+      if (!currentUser) {
+        addToast("Please sign in to access the Employee dashboard.", "info")
+        setView("home")
+        return
+      }
+      if (currentUser.role !== "employee") {
+        addToast("Access Denied: Only verified Employees can access the Employee dashboard.", "error")
+        setView("seeker")
+        return
+      }
+    }
+
+    if (v === "seeker") {
+      if (!currentUser) {
+        addToast("Please sign in to access the Seeker dashboard.", "info")
+        setView("home")
+        return
+      }
+      if (currentUser.role !== "seeker") {
+        addToast("Access Denied: Only Seekers can access the Seeker dashboard.", "error")
+        setView("employee")
+        return
+      }
+    }
+
+    if (v === "admin") {
+      if (currentUser?.role !== "admin") {
+        addToast("Access Denied: Admin privileges required.", "error")
+        setView("home")
+        return
+      }
+    }
+
+    setView(v)
+  }
+
   const value = useMemo<MarketplaceState>(() => {
     const hasApplied = (jobId: number) =>
-      applications.some(
-        (a) => a.jobId === jobId && a.candidateName === seekerName,
-      )
+      applications.some((a) => a.jobId === jobId)
+
+    const setVerifiedEmail = (email: string | null) => {
+      setVerifiedEmailState(email)
+    }
 
     return {
       view,
-      setView,
+      setView: protectedSetView,
       jobs,
       applications,
+      currentUser,
+      fetchCurrentUser,
+      login: async (credentials) => {
+        const res = await fetch("/api/auth/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(credentials),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          addToast("Welcome back to Referloop!", "success")
+          await fetchCurrentUser()
+          return { ok: true }
+        }
+        return { ok: false, error: data.error, notVerified: data.notVerified }
+      },
+      register: async (regData) => {
+        const res = await fetch("/api/auth/register", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(regData),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          addToast("Account registered! Please check your email.", "success")
+          return { ok: true, mockCode: data.mockCode }
+        }
+        return { ok: false, error: data.error }
+      },
+      logout: async () => {
+        await fetch("/api/auth/logout", { method: "POST" })
+        addToast("Logged out successfully.", "info")
+        setCurrentUser(null)
+        setVerifiedEmailState(null)
+        setView("home")
+      },
       tokensRemaining,
       maxTokens,
       resumeName,
       resumePdf,
       resumeSummary,
       selectedExpertise,
-      seekerName,
       setSelectedExpertise,
-      uploadResume: (name, pdfBase64, summary) => {
+      uploadResume: async (name, pdfBase64, summary) => {
         setResumeName(name)
         setResumePdf(pdfBase64)
         setResumeSummary(summary)
-        addToast(`Resume "${name}" uploaded and analyzed!`, "success")
+        addToast(`Resume "${name}" analyzed successfully!`, "success")
+        
+        // Sync with backend profile
+        try {
+          await fetch("/api/auth/me", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              resumeName: name,
+              resumePdf: pdfBase64,
+              resumeSummary: summary,
+              aiSummary: summary
+            })
+          })
+        } catch (e) {
+          console.error("Failed to sync resume with profile:", e)
+        }
       },
-      deleteResume: () => {
+      deleteResume: async () => {
         setResumeName(null)
         setResumePdf(null)
         setResumeSummary(null)
-        addToast("Resume removed from profile.", "info")
+        addToast("Resume removed.", "info")
+        
+        // Remove from profile
+        try {
+          await fetch("/api/auth/me", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              resumeName: null,
+              resumePdf: null,
+              resumeSummary: null,
+              aiSummary: null
+            })
+          })
+        } catch (e) {
+          console.error("Failed to clear resume from profile:", e)
+        }
       },
       enterSeeker: (expertise, resume, resumePdfVal, resumeSummaryVal) => {
         setSelectedExpertise(expertise)
@@ -382,129 +476,163 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
         setResumePdf(resumePdfVal)
         setResumeSummary(resumeSummaryVal)
         setView("seeker")
-        addToast("Entered Seeker Dashboard.", "info")
       },
       hasApplied,
-      applyToJob: (jobId, pitch) => {
-        if (hasApplied(jobId)) {
-          addToast("You already applied to this role.", "error")
-          return { ok: false, reason: "You already applied to this role." }
+      applyToJob: async (jobId, pitch) => {
+        try {
+          const res = await fetch("/api/applications", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jobId,
+              pitch,
+              resumePdf,
+              resumeName,
+              resumeSummary,
+              aiSummary: resumeSummary
+            }),
+          })
+          const data = await res.json()
+          if (!res.ok) {
+            addToast(data.error || "Failed to submit application.", "error")
+            return { ok: false, reason: data.error }
+          }
+          addToast("Referral application submitted successfully!", "success")
+          await loadApplications()
+          await fetchCurrentUser() // Refresh tokens remaining
+          return { ok: true }
+        } catch (e: any) {
+          addToast(e.message, "error")
+          return { ok: false, reason: e.message }
         }
-        if (tokensRemaining <= 0) {
-          addToast("You are out of application tokens.", "error")
-          return { ok: false, reason: "You are out of application tokens." }
-        }
-        const job = jobs.find((j) => j.id === jobId)
-        if (!job) {
-          addToast("Role not found.", "error")
-          return { ok: false, reason: "Role not found." }
-        }
-
-        setTokensRemaining((t) => t - 1)
-        setApplications((prev) => [
-          {
-            id: Date.now(),
-            jobId,
-            jobTitle: job.title,
-            category: job.category,
-            candidateName: seekerName,
-            primarySkill: resumeSummary?.skills?.[0] || job.stack.split(",")[0]?.trim() || "Generalist",
-            pitch,
-            matchScore: resumeSummary?.matchScore || randomMatchScore(),
-            status: "pending",
-            appliedAt: Date.now(),
-            resumePdf,
-            resumeSummary,
-          },
-          ...prev,
-        ])
-        addToast("Application submitted successfully! Sped 1 Token.", "success")
-        return { ok: true }
       },
-      postJob: (input) => {
-        const industryByCategory: Record<Category, string> = {
-          "Software Engineering": "Technology",
-          "Data & AI": "AI Startup",
-          Product: "SaaS",
-          Design: "SaaS",
-          Marketing: "Consumer",
-          Sales: "Enterprise Software",
-          Finance: "Financial Services",
-          Operations: "Logistics",
+      postJob: async (jobInput) => {
+        try {
+          const res = await fetch("/api/jobs", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(jobInput),
+          })
+          const data = await res.json()
+          if (!res.ok) {
+            addToast(data.error || "Failed to publish listing.", "error")
+            return { ok: false, error: data.error }
+          }
+          addToast("Referral opportunity posted anonymously!", "success")
+          await loadJobs()
+          return { ok: true }
+        } catch (e: any) {
+          addToast(e.message, "error")
+          return { ok: false, error: e.message }
         }
-        const newId = Math.max(0, ...jobs.map((j) => j.id)) + 1
-        const newJob: Job = {
-          id: newId,
-          title: input.title,
-          category: input.category,
-          industry: industryByCategory[input.category],
-          companySize: input.companySize,
-          stack: input.stack,
-          postedBy: "Anon_You",
-          bounty: input.bounty,
-        }
-        setJobs((prev) => [newJob, ...prev])
-
-        // Seed a fresh applicant so the Kanban shows activity immediately.
-        setApplications((prev) => [
-          {
-            id: newId * 1000 + 1,
-            jobId: newId,
-            jobTitle: input.title,
-            category: input.category,
-            candidateName: "Jordan Blake",
-            primarySkill: input.stack.split(",")[0]?.trim() || "Generalist",
-            pitch:
-              PITCH_SNIPPETS[Math.floor(Math.random() * PITCH_SNIPPETS.length)],
-            matchScore: randomMatchScore(),
-            status: "pending",
-            appliedAt: Date.now(),
-          },
-          ...prev,
-        ])
-        addToast(`Successfully posted "${input.title}"! Candidate matched.`, "success")
       },
-      updateApplicationStatus: (id, status) => {
-        setApplications((prev) =>
-          prev.map((a) => (a.id === id ? { ...a, status } : a)),
-        )
-        if (status === "referred") {
-          addToast("Candidate referred! Bonus unlocked! 🎉", "success")
-          setConfettiTrigger((prev) => prev + 1)
-        } else if (status === "shortlisted") {
-          addToast("Candidate shortlisted. Opening chat option.", "info")
-        } else {
-          addToast(`Application status updated to "${status}".`, "info")
+      updateJob: async (id, jobInput) => {
+        try {
+          const res = await fetch("/api/jobs", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, ...jobInput }),
+          })
+          const data = await res.json()
+          if (!res.ok) {
+            addToast(data.error || "Failed to update listing.", "error")
+            return { ok: false, error: data.error }
+          }
+          addToast("Listing updated successfully!", "success")
+          await loadJobs()
+          return { ok: true }
+        } catch (e: any) {
+          addToast(e.message, "error")
+          return { ok: false, error: e.message }
+        }
+      },
+      deleteJob: async (id) => {
+        try {
+          const res = await fetch(`/api/jobs?id=${id}`, {
+            method: "DELETE",
+          })
+          const data = await res.json()
+          if (!res.ok) {
+            addToast(data.error || "Failed to delete listing.", "error")
+            return { ok: false, error: data.error }
+          }
+          addToast("Listing deleted successfully.", "info")
+          await loadJobs()
+          return { ok: true }
+        } catch (e: any) {
+          addToast(e.message, "error")
+          return { ok: false, error: e.message }
+        }
+      },
+      updateApplicationStatus: async (id, status) => {
+        try {
+          const res = await fetch("/api/applications", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id, status }),
+          })
+          const data = await res.json()
+          if (res.ok) {
+            addToast(`Candidate moved to ${status}.`, "success")
+            if (status === "referred") {
+              triggerConfetti()
+            }
+            await loadApplications()
+          } else {
+            addToast(data.error || "Failed to update status.", "error")
+          }
+        } catch (e: any) {
+          addToast(e.message, "error")
         }
       },
       verifiedEmail,
-      setVerifiedEmail: (email) => {
-        setVerifiedEmail(email)
-        if (email) {
-          addToast(`Domain authenticated for ${email}.`, "success")
-        } else {
-          addToast("Employee log out complete.", "info")
-        }
-      },
+      setVerifiedEmail,
       messages,
-      sendMessage: (applicationId, sender, text) => {
-        const newMessage: Message = {
-          id: Date.now() + Math.random(),
-          applicationId,
-          sender,
-          text,
-          timestamp: Date.now(),
+      sendMessage: async (applicationId, sender, text) => {
+        try {
+          const res = await fetch("/api/messages", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ applicationId, text }),
+          })
+          const data = await res.json()
+          if (res.ok) {
+            await loadMessages(applicationId)
+          } else {
+            addToast(data.error || "Failed to send message.", "error")
+          }
+        } catch (e: any) {
+          addToast(e.message, "error")
         }
-        setMessages((prev) => [...prev, newMessage])
-        addToast("Message sent anonymously.", "success")
       },
+      loadMessages,
       toasts,
       addToast,
       removeToast,
       confettiTrigger,
       triggerConfetti,
+      adminData,
+      fetchAdminData,
+      updateUserByAdmin,
+      loadJobs,
+      loadApplications,
     }
-  }, [view, jobs, applications, tokensRemaining, resumeName, selectedExpertise, verifiedEmail, messages, toasts, confettiTrigger])
+  }, [
+    view,
+    jobs,
+    applications,
+    currentUser,
+    tokensRemaining,
+    resumeName,
+    resumePdf,
+    resumeSummary,
+    selectedExpertise,
+    verifiedEmail,
+    messages,
+    toasts,
+    confettiTrigger,
+    adminData,
+  ])
 
   return (
     <MarketplaceContext.Provider value={value}>
@@ -514,18 +642,9 @@ export function MarketplaceProvider({ children }: { children: ReactNode }) {
 }
 
 export function useMarketplace() {
-  const ctx = useContext(MarketplaceContext)
-  if (!ctx) {
-    throw new Error("useMarketplace must be used within MarketplaceProvider")
+  const context = useContext(MarketplaceContext)
+  if (!context) {
+    throw new Error("useMarketplace must be used within a MarketplaceProvider")
   }
-  return ctx
-}
-
-export const STATUS_LABELS: Record<
-  ApplicationStatus,
-  { seeker: string; employee: string }
-> = {
-  pending: { seeker: "Pending Review", employee: "New Applicants" },
-  shortlisted: { seeker: "Shortlisted", employee: "Shortlisted" },
-  referred: { seeker: "Referred", employee: "Referred" },
+  return context
 }

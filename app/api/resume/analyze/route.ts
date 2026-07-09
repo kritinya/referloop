@@ -14,8 +14,6 @@ if (typeof global !== "undefined") {
 }
 
 const pdf = require("pdf-parse")
-import { saveOTP } from "@/lib/db" // wait, saveOTP is not used here but it's fine, let's import it or keep it clean.
-import { saveOTP as _dummy } from "@/lib/db" // keep import if needed, or delete. Let's just import saveOTP. Actually, db.ts is not needed here. Let's remove db import to keep it clean.
 
 export async function POST(request: Request) {
   try {
@@ -31,7 +29,14 @@ export async function POST(request: Request) {
 
     let text = ""
     try {
-      const parsed = await pdf(buffer)
+      let parsed;
+      if (typeof pdf === "function") {
+        parsed = await pdf(buffer)
+      } else if (pdf && typeof pdf.default === "function") {
+        parsed = await pdf.default(buffer)
+      } else {
+        throw new TypeError("pdf-parse resolution failed.")
+      }
       text = parsed.text || ""
     } catch (err: any) {
       console.warn("pdf-parse failed, extracting readable strings instead:", err)

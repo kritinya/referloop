@@ -1,7 +1,6 @@
 "use client"
 
-import { Network } from "lucide-react"
-
+import { Network, LogOut } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 import { useMarketplace, type View } from "@/lib/marketplace-store"
@@ -13,42 +12,16 @@ const NAV_ITEMS: { label: string; view: View }[] = [
 ]
 
 export function TopNav() {
-  const { view, setView, verifiedEmail, resumeName } = useMarketplace()
-
-  const getButtonText = () => {
-    if (verifiedEmail && resumeName) {
-      const domain = verifiedEmail.split("@")[1] || "Verified"
-      return `Active: ${domain} & Seeker`
-    }
-    if (verifiedEmail) {
-      const domain = verifiedEmail.split("@")[1] || "Verified"
-      return `Employee Verified (${domain})`
-    }
-    if (resumeName) {
-      return "Seeker Active"
-    }
-    return "Sign in"
-  }
-
-  const handleAuthClick = () => {
-    if (verifiedEmail) {
-      setView("employee")
-    } else if (resumeName) {
-      setView("seeker")
-    } else {
-      setView("home")
-    }
-  }
-
-  const authenticated = !!(verifiedEmail || resumeName)
+  const { view, setView, currentUser, logout } = useMarketplace()
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
+        {/* Brand Logo */}
         <button
           type="button"
           onClick={() => setView("home")}
-          className="flex items-center gap-2"
+          className="flex items-center gap-2 cursor-pointer"
         >
           <span className="flex size-9 items-center justify-center rounded-xl bg-primary text-primary-foreground">
             <Network className="size-5" />
@@ -58,6 +31,7 @@ export function TopNav() {
           </span>
         </button>
 
+        {/* Global Navigation View Tabs */}
         <nav className="flex items-center gap-1 rounded-full border border-border bg-card p-1">
           {NAV_ITEMS.map((item) => (
             <button
@@ -65,7 +39,7 @@ export function TopNav() {
               type="button"
               onClick={() => setView(item.view)}
               className={cn(
-                "rounded-full px-3 py-1.5 text-sm font-medium transition-colors",
+                "rounded-full px-3 py-1.5 text-sm font-medium transition-colors cursor-pointer",
                 view === item.view
                   ? "bg-primary text-primary-foreground"
                   : "text-muted-foreground hover:text-foreground",
@@ -77,17 +51,33 @@ export function TopNav() {
           ))}
         </nav>
 
-        <div className="hidden md:block">
-          <Button
-            variant={authenticated ? "default" : "outline"}
-            size="sm"
-            onClick={handleAuthClick}
-            className={cn(
-              authenticated && "bg-success text-success-foreground border-success hover:bg-success/90 hover:text-success-foreground"
-            )}
-          >
-            {getButtonText()}
-          </Button>
+        {/* User Auth Info & Logout Action */}
+        <div className="flex items-center gap-2">
+          {currentUser ? (
+            <div className="flex items-center gap-2">
+              <span className="hidden md:inline text-xs text-muted-foreground font-semibold uppercase tracking-wide">
+                {currentUser.name} ({currentUser.role})
+              </span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={logout}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive gap-1.5 cursor-pointer"
+              >
+                <LogOut className="size-3.5" />
+                Log Out
+              </Button>
+            </div>
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setView("home")}
+              className="cursor-pointer"
+            >
+              Sign In
+            </Button>
+          )}
         </div>
       </div>
     </header>
